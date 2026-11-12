@@ -8,17 +8,13 @@
 
 ## Configuración (una sola vez)
 
-1. **Supabase**: crea un proyecto.
-2. **Secrets en GitHub** (Settings > Secrets and variables > Actions):
-   - `SUPABASE_URL` y `SUPABASE_ANON_KEY` (Project Settings > API).
-   - `SUPABASE_PROJECT_ID` (el ref del proyecto), `SUPABASE_DB_PASSWORD` y `SUPABASE_ACCESS_TOKEN` (supabase.com/dashboard/account/tokens).
-   - Opcional, en *Variables*: `SITE_URL` si usas dominio propio (ej. `https://mariana-y-diego.com`).
-3. **GitHub Pages**: Settings > Pages > Source: **GitHub Actions**.
-4. Haz merge a `main`. Se aplican las migraciones y se publica el sitio.
-5. **Usuario del dashboard**: en Supabase > Authentication > Users crea tu usuario (correo y contraseña). Desactiva el registro público (Authentication > Sign In / Providers > "Allow new users to sign up"). Luego en el SQL Editor:
-   ```sql
-   insert into public.admins (email) values ('tu-correo@ejemplo.com');
-   ```
+1. **Supabase**: crea un proyecto y aplica las migraciones de `supabase/migrations/` (con el workflow o con la CLI, ver abajo).
+2. **Secrets en GitHub** (Settings > Secrets and variables > Actions): `SUPABASE_URL` y `SUPABASE_ANON_KEY` (Project Settings > API).
+   Opcional, en *Variables*: `SITE_URL` si usas dominio propio.
+3. **GitHub Pages**: Settings > Pages > Build and deployment > Source: **GitHub Actions**. Sin esto el workflow falla en `configure-pages`.
+4. Haz merge a `main` (o ejecuta el workflow "Desplegar invitación" a mano desde la pestaña Actions).
+
+El dashboard no tiene login: cualquiera con su URL puede ver y editar la lista. No la compartas.
 
 ## Uso
 
@@ -27,7 +23,11 @@
 - Excel: columnas `Nombre`, `Teléfono`, `Pases`, `Grupo`, `Notas`. Volver a cargar el mismo archivo actualiza a los invitados sin perder sus confirmaciones.
 - "Mesa de regalos" en el dashboard guarda banco, titular y CLABE, que se muestran en la invitación.
 
-## Migraciones locales (opcional)
+## Migraciones
+
+Automáticas: agrega los secrets `SUPABASE_PROJECT_ID`, `SUPABASE_DB_PASSWORD` y `SUPABASE_ACCESS_TOKEN`. Si no existen, el workflow se omite sin fallar.
+
+Manuales, con la CLI:
 
 ```bash
 supabase link --project-ref <ref>
