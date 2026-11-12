@@ -1,0 +1,67 @@
+name: Desplegar invitación
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: pages
+        uses: actions/configure-pages@v5
+
+      - name: Construir sitio
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SITE_URL: ${{ vars.SITE_URL }}
+          BASE_PATH: ${{ steps.pages.outputs.base_path }}
+        run: |
+          set -euo pipefail
+          mkdir -p _site
+          cp -r web/. _site/
+
+          # Configuración pública (la anon key de Supabase es pública por diseño; la seguridad la da RLS)
+          cat > _site/config.js <<JS
+          window.BODA_CONFIG = {
+            supabaseUrl: "${SUPABASE_URL}",
+            supabaseAnonKey: "${SUPABASE_ANON_KEY}",
+            basePath: "${BASE_PATH}",
+            siteUrl: "${SITE_URL}"
+          };
+          JS
+
+          # La invitación se publica tal cual; solo se agregan dos scripts antes de </body>
+          SRC="invitacion-boda-mariana-diego (3).html"
+          TAGS="<script src=\"${BASE_PATH}/config.js\"></script><script src=\"${BASE_PATH}/rsvp.js\"></script>"
+          sed "s#</body>#${TAGS}</body>#" "$SRC" > _site/index.html
+          # 404.html permite URLs del tipo dominio/nombre-del-invitado
+          cp _site/index.html _site/404.html
+          touch _site/.nojekyll
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
