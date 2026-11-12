@@ -23,5 +23,9 @@ jobs:
 
       - name: Aplicar migraciones
         run: |
+          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$SUPABASE_PROJECT_ID" ]; then
+            echo "::notice::Sin secrets de Supabase CLI; aplica las migraciones manualmente (ver README)."
+            exit 0
+          fi
           supabase link --project-ref "$SUPABASE_PROJECT_ID" --password "$SUPABASE_DB_PASSWORD"
           supabase db push --password "$SUPABASE_DB_PASSWORD"

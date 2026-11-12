@@ -22,16 +22,10 @@
     .btn.danger:hover { background:var(--no); color:var(--white); }
     input,select,textarea { padding:.6rem .7rem; border:1px solid var(--black); background:transparent; border-radius:0; width:100%; }
 
-    /* Login */
-    #login { min-height:100vh; display:flex; align-items:center; justify-content:center; padding:1rem; }
-    .login-box { width:100%; max-width:360px; border:1px solid var(--black); padding:2.5rem 1.8rem; text-align:center; }
-    .login-box h1 { font-size:2.4rem; line-height:1; margin-bottom:.4rem; }
-    .login-box p { font-size:.7rem; letter-spacing:.3em; text-transform:uppercase; color:var(--gray); margin-bottom:1.8rem; }
-    .login-box form { display:flex; flex-direction:column; gap:.7rem; }
-    .msg { font-size:.85rem; margin-top:.8rem; color:var(--no); }
+    .msg { font-size:.9rem; padding:2rem 1rem; text-align:center; color:var(--no); }
 
     /* App */
-    #app { display:none; max-width:1200px; margin:0 auto; padding:1.5rem 1rem 4rem; }
+    #app { max-width:1200px; margin:0 auto; padding:1.5rem 1rem 4rem; }
     header { display:flex; justify-content:space-between; align-items:flex-end; gap:1rem; flex-wrap:wrap; border-bottom:1px solid var(--black); padding-bottom:1rem; margin-bottom:1.5rem; }
     header h1 { font-size:2.2rem; line-height:1; }
     header small { display:block; font-size:.65rem; letter-spacing:.3em; text-transform:uppercase; color:var(--gray); margin-bottom:.3rem; }
@@ -66,6 +60,7 @@
     dialog h2 { font-size:1.7rem; margin-bottom:1rem; }
     dialog form { display:flex; flex-direction:column; gap:.7rem; }
     dialog label { font-size:.65rem; letter-spacing:.12em; text-transform:uppercase; color:var(--gray); display:flex; flex-direction:column; gap:.3rem; }
+    dialog input, dialog select, dialog textarea { font-size:.9rem; letter-spacing:normal; text-transform:none; color:var(--black); }
     dialog .row { display:grid; grid-template-columns:1fr 1fr; gap:.7rem; }
     dialog .actions { display:flex; gap:.5rem; justify-content:flex-end; margin-top:.5rem; }
     .help { font-size:.8rem; color:var(--gray); line-height:1.5; }
@@ -77,19 +72,6 @@
 </head>
 <body>
 
-  <section id="login">
-    <div class="login-box">
-      <h1>Mariana &amp; Diego</h1>
-      <p>Lista de invitados</p>
-      <form id="login-form">
-        <input type="email" id="email" placeholder="Correo" required autocomplete="email">
-        <input type="password" id="password" placeholder="Contraseña" required autocomplete="current-password">
-        <button class="btn primary" type="submit">Entrar</button>
-      </form>
-      <div class="msg" id="login-msg"></div>
-    </div>
-  </section>
-
   <main id="app">
     <header>
       <div>
@@ -97,9 +79,7 @@
         <h1>Invitados</h1>
       </div>
       <div class="toolbar" style="margin:0">
-        <span class="slug" id="who"></span>
         <button class="btn sm" id="btn-bank">Mesa de regalos</button>
-        <button class="btn sm" id="btn-logout">Salir</button>
       </div>
     </header>
 
@@ -197,10 +177,10 @@
     var ESTADOS = { pendiente: 'Pendiente', confirmado: 'Confirmado', no_asiste: 'No asiste' };
 
     if (!cfg.supabaseUrl || !cfg.supabaseAnonKey) {
-      $('login-msg').textContent = 'Falta configurar SUPABASE_URL y SUPABASE_ANON_KEY en GitHub.';
+      document.body.innerHTML = '<p class="msg">Falta configurar SUPABASE_URL y SUPABASE_ANON_KEY en GitHub.</p>';
       return;
     }
-    var sb = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey);
+    var sb = supabase.createClient(cfg.supabaseUrl, cfg.supabaseAnonKey, { auth: { persistSession: false } });
     var guests = [];
     var pendingImport = [];
 
@@ -232,34 +212,12 @@
         'Por favor confirma tu asistencia aquí: ' + linkFor(g) + '\n\nMariana & Diego';
     }
 
-    // ---------- autenticación ----------
-    $('login-form').addEventListener('submit', function (e) {
-      e.preventDefault();
-      $('login-msg').textContent = '';
-      sb.auth.signInWithPassword({ email: $('email').value.trim(), password: $('password').value })
-        .then(function (r) { if (r.error) throw r.error; return start(r.data.session); })
-        .catch(function (err) { $('login-msg').textContent = 'No se pudo entrar: ' + (err.message || err); });
-    });
-    $('btn-logout').addEventListener('click', function () { sb.auth.signOut().then(function () { location.reload(); }); });
-
-    function start(session) {
-      if (!session) return;
-      return sb.rpc('es_admin').then(function (r) {
-        if (r.error) throw r.error;
-        if (!r.data) {
-          sb.auth.signOut();
-          $('login-msg').textContent = 'Este correo no tiene acceso. Agrégalo a la tabla admins en Supabase.';
-          return;
-        }
-        $('login').style.display = 'none';
-        $('app').style.display = 'block';
-        $('who').textContent = session.user.email;
-        load();
-        sb.channel('invitados').on('postgres_changes', { event: '*', schema: 'public', table: 'invitados' }, function () { load(); }).subscribe();
-        setInterval(load, 60000);
-      });
+    // ---------- inicio ----------
+    function start() {
+      load();
+      sb.channel('invitados').on('postgres_changes', { event: '*', schema: 'public', table: 'invitados' }, function () { load(); }).subscribe();
+      setInterval(load, 60000);
     }
-    sb.auth.getSession().then(function (r) { start(r.data.session); });
 
     // ---------- datos ----------
     function load() {
@@ -440,6 +398,8 @@
       var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Invitados');
       XLSX.writeFile(wb, 'invitados-mariana-diego-' + new Date().toISOString().slice(0, 10) + '.xlsx');
     });
+
+    start();
 
     $('btn-import').addEventListener('click', function () { $('file').value = ''; $('file').click(); });
     $('file').addEventListener('change', function () {
