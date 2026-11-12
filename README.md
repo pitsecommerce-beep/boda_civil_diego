@@ -1,7 +1,7 @@
 # Invitación boda civil · Mariana & Diego
 
 - `invitacion-boda-mariana-diego (3).html`: la invitación original. No se edita; al desplegar solo se le agregan dos scripts.
-- `web/rsvp.js`: confirmación personalizada y datos bancarios en "Mesa de regalos".
+- `web/rsvp.js`: al presionar "Confirmar asistencia" desde la liga del invitado, lo registra como confirmado y datos bancarios en "Mesa de regalos".
 - `web/dashboard/`: dashboard de invitados (`/dashboard/`).
 - `supabase/migrations/`: esquema de la base de datos.
 - `.github/workflows/`: despliegue a GitHub Pages y migraciones a Supabase.
@@ -20,7 +20,7 @@ El dashboard no tiene login: cualquiera con su URL puede ver y editar la lista. 
 
 - Dashboard: `https://<usuario>.github.io/boda_civil_diego/dashboard/`
 - Link de cada invitado: `https://<usuario>.github.io/boda_civil_diego/juan-perez`
-- Excel: columnas `Nombre`, `Teléfono`, `Pases`, `Grupo`, `Notas`. Volver a cargar el mismo archivo actualiza a los invitados sin perder sus confirmaciones.
+- Excel: descarga la plantilla y llena la columna `Nombre del invitado` (opcionales: `Teléfono`, `Pases`, `Grupo`, `Notas`). Volver a cargar el mismo archivo actualiza a los invitados sin perder sus confirmaciones.
 - "Mesa de regalos" en el dashboard guarda banco, titular y CLABE, que se muestran en la invitación.
 
 ## Migraciones

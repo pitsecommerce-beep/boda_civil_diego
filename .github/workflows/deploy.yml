@@ -15,8 +15,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
+  deploy:
     runs-on: ubuntu-latest
+    # Corre dentro del environment github-pages para leer también sus secrets/variables
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
 
@@ -25,16 +29,22 @@ jobs:
 
       - name: Construir sitio
         env:
-          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
-          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL || vars.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY || vars.SUPABASE_ANON_KEY }}
           SITE_URL: ${{ vars.SITE_URL }}
           BASE_PATH: ${{ steps.pages.outputs.base_path }}
         run: |
           set -euo pipefail
+          if [ -z "${SUPABASE_URL}" ] || [ -z "${SUPABASE_ANON_KEY}" ]; then
+            echo "::error::SUPABASE_URL o SUPABASE_ANON_KEY están vacíos. Agrégalos en Settings > Secrets and variables > Actions."
+            exit 1
+          fi
+          SUPABASE_URL="$(echo "${SUPABASE_URL}" | tr -d '[:space:]')"
+          SUPABASE_ANON_KEY="$(echo "${SUPABASE_ANON_KEY}" | tr -d '[:space:]')"
           mkdir -p _site
           cp -r web/. _site/
 
-          # Configuración pública (la anon key de Supabase es pública por diseño; la seguridad la da RLS)
+          # Configuración pública (la anon key de Supabase es pública por diseño)
           cat > _site/config.js <<JS
           window.BODA_CONFIG = {
             supabaseUrl: "${SUPABASE_URL}",
@@ -46,8 +56,10 @@ jobs:
 
           # La invitación se publica tal cual; solo se agregan dos scripts antes de </body>
           SRC="invitacion-boda-mariana-diego (3).html"
-          TAGS="<script src=\"${BASE_PATH}/config.js\"></script><script src=\"${BASE_PATH}/rsvp.js\"></script>"
+          V="${GITHUB_SHA::7}"
+          TAGS="<script src=\"${BASE_PATH}/config.js?v=${V}\"></script><script src=\"${BASE_PATH}/rsvp.js?v=${V}\"></script>"
           sed "s#</body>#${TAGS}</body>#" "$SRC" > _site/index.html
+          sed -i "s#\.\./config\.js#../config.js?v=${V}#" _site/dashboard/index.html
           # 404.html permite URLs del tipo dominio/nombre-del-invitado
           cp _site/index.html _site/404.html
           touch _site/.nojekyll
@@ -56,12 +68,5 @@ jobs:
         with:
           path: _site
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - id: deployment
         uses: actions/deploy-pages@v4

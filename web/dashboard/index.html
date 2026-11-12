@@ -97,7 +97,7 @@
       <button class="btn" id="btn-add">Agregar</button>
       <button class="btn" id="btn-import">Cargar Excel</button>
       <button class="btn" id="btn-export">Descargar Excel</button>
-      <button class="btn" id="btn-template">Plantilla</button>
+      <button class="btn" id="btn-template">Descargar plantilla</button>
       <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
     </div>
 
@@ -378,8 +378,8 @@
     }
 
     $('btn-template').addEventListener('click', function () {
-      var ws = XLSX.utils.aoa_to_sheet([HEADERS, ['Juan Pérez', '5512345678', 2, 'Familia Diego', ''], ['Ana López', '5587654321', 1, 'Amigos Mariana', '']]);
-      ws['!cols'] = [{ wch: 28 }, { wch: 14 }, { wch: 7 }, { wch: 20 }, { wch: 30 }];
+      var ws = XLSX.utils.aoa_to_sheet([['Nombre del invitado'], ['Juan Pérez'], ['Familia López García']]);
+      ws['!cols'] = [{ wch: 40 }];
       var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, 'Invitados');
       XLSX.writeFile(wb, 'plantilla-invitados.xlsx');
     });
@@ -408,23 +408,29 @@
         var wb = XLSX.read(buf, { type: 'array' });
         var rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { defval: '' });
         var seen = {}, out = [], skipped = 0;
+        // Solo se envían las columnas que existen en el archivo, para no borrar datos ya capturados
+        var headers = (XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 })[0] || []).map(norm);
+        var has = function (keys) { return headers.some(function (h) { return keys.indexOf(h) !== -1; }); };
+        var K = {
+          telefono: ['telefono', 'celular', 'whatsapp', 'tel'],
+          pases: ['pases', 'lugares', 'boletos', 'personas'],
+          grupo: ['grupo', 'mesa', 'familia', 'categoria'],
+          notas: ['notas', 'nota', 'comentarios']
+        };
         rows.forEach(function (r) {
-          var nombre = pick(r, ['nombre', 'invitado', 'nombre completo', 'name']);
+          var nombre = pick(r, ['nombre del invitado', 'nombre', 'invitado', 'nombre completo', 'name']);
           if (!nombre) { skipped++; return; }
           var base = slugify(pick(r, ['slug']) || nombre);
           if (!base) { skipped++; return; }
           var slug = base, i = 2;
           while (seen[slug]) slug = base + '-' + (i++);
           seen[slug] = true;
-          out.push({
-            slug: slug,
-            nombre: nombre,
-            telefono: pick(r, ['telefono', 'celular', 'whatsapp', 'tel']) || null,
-            pases: Math.max(1, parseInt(pick(r, ['pases', 'lugares', 'boletos', 'personas']), 10) || 1),
-            grupo: pick(r, ['grupo', 'mesa', 'familia', 'categoria']) || null,
-            notas: pick(r, ['notas', 'nota', 'comentarios']) || null,
-            updated_at: new Date().toISOString()
-          });
+          var row = { slug: slug, nombre: nombre, updated_at: new Date().toISOString() };
+          if (has(K.telefono)) row.telefono = pick(r, K.telefono) || null;
+          if (has(K.pases)) row.pases = Math.max(1, parseInt(pick(r, K.pases), 10) || 1);
+          if (has(K.grupo)) row.grupo = pick(r, K.grupo) || null;
+          if (has(K.notas)) row.notas = pick(r, K.notas) || null;
+          out.push(row);
         });
         var existing = {}; guests.forEach(function (g) { existing[g.slug] = true; });
         var nuevos = out.filter(function (r) { return !existing[r.slug]; }).length;
@@ -432,7 +438,7 @@
         $('import-summary').innerHTML = 'Se encontraron <strong>' + out.length + '</strong> invitados en el archivo.<br>' +
           nuevos + ' nuevos y ' + (out.length - nuevos) + ' se actualizarán (sin cambiar su confirmación).' +
           (skipped ? '<br>' + skipped + ' filas sin nombre se omitirán.' : '') +
-          '<br><br>Columnas reconocidas: Nombre, Teléfono, Pases, Grupo, Notas.';
+          '<br><br>Columna requerida: Nombre del invitado. Opcionales: Teléfono, Pases, Grupo, Notas.';
         $('dlg-import').showModal();
       }).catch(function (err) { toast('No se pudo leer el archivo: ' + err.message); });
     });
@@ -440,7 +446,7 @@
     $('imp-ok').addEventListener('click', function () {
       if (!pendingImport.length) return $('dlg-import').close();
       this.disabled = true; var btn = this;
-      sb.from('invitados').upsert(pendingImport, { onConflict: 'slug' }).then(function (r) {
+      sb.from('invitados').upsert(pendingImport, { onConflict: 'slug', defaultToNull: false }).then(function (r) {
         btn.disabled = false; $('dlg-import').close();
         if (r.error) return toast('Error al importar: ' + r.error.message);
         toast(pendingImport.length + ' invitados importados'); pendingImport = []; load();

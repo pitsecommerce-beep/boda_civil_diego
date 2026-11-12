@@ -79,19 +79,17 @@
     })
     .catch(function () {});
 
-  // ---------- Confirmación personalizada ----------
+  // ---------- Confirmación con la liga personalizada ----------
+  // dominio/nombre-del-invitado: al presionar "Confirmar asistencia" se registra
+  // en Supabase que ese invitado sí asistirá.
   var slug = getSlug();
-  if (!slug) return;
+  var btn = document.querySelector('a.btn[href*="wa.me"]');
+  if (!slug || !btn) return;
 
   var style = document.createElement('style');
   style.textContent =
-    '.rsvp-field{margin:1.2rem 0 0;text-align:left;font-size:.72rem;letter-spacing:.14em;text-transform:uppercase;color:#666}' +
-    '.rsvp-field select,.rsvp-field textarea{display:block;width:100%;margin-top:.4rem;padding:.7rem;border:1px solid #0a0a0a;background:transparent;font-family:Inter,sans-serif;font-weight:300;font-size:.9rem;color:#0a0a0a;letter-spacing:normal;text-transform:none;border-radius:0}' +
-    '.rsvp-field textarea{resize:vertical;min-height:70px}' +
-    '.rsvp-actions{display:flex;flex-direction:column;gap:.65rem;margin-top:1.4rem}' +
-    '.rsvp-actions .btn:disabled{opacity:.5;cursor:wait}' +
-    '.rsvp-status{margin-top:1rem;font-size:.85rem;color:#666}' +
-    '.rsvp-error{margin-top:1rem;font-size:.85rem;color:#a00}';
+    '.rsvp-link{background:none;border:none;color:#666;text-decoration:underline;cursor:pointer;font:inherit;font-size:.8rem;margin-top:1.4rem}' +
+    '.rsvp-error{color:#a00}';
   document.head.appendChild(style);
 
   var modal = document.createElement('div');
@@ -100,74 +98,52 @@
   modal.innerHTML = '<div class="modal-content"><button class="modal-close" aria-label="Cerrar">&times;</button><div class="rsvp-body"></div></div>';
   document.body.appendChild(modal);
   var body = modal.querySelector('.rsvp-body');
-
+  function show(html) { body.innerHTML = html; modal.classList.add('active'); }
   function close() { modal.classList.remove('active'); }
   modal.querySelector('.modal-close').addEventListener('click', close);
   modal.addEventListener('click', function (e) { if (e.target === modal) close(); });
 
-  var guest = null;
+  var guestReq = rpc('get_invitado', { p_slug: slug })
+    .then(function (rows) { return rows && rows[0] ? rows[0] : null; })
+    .catch(function () { return null; });
 
-  function renderForm() {
-    var g = guest;
-    var options = '';
-    for (var n = 1; n <= g.pases; n++) {
-      var sel = (g.asistentes || g.pases) === n ? ' selected' : '';
-      options += '<option value="' + n + '"' + sel + '>' + n + (n === 1 ? ' persona' : ' personas') + '</option>';
-    }
-    var previo = '';
-    if (g.estado === 'confirmado') previo = '<p class="rsvp-status">Ya confirmaste tu asistencia. Puedes cambiar tu respuesta si lo necesitas.</p>';
-    if (g.estado === 'no_asiste') previo = '<p class="rsvp-status">Nos indicaste que no podrás asistir. Puedes cambiar tu respuesta si lo necesitas.</p>';
-
-    body.innerHTML =
-      '<h2>' + esc(g.nombre) + '</h2>' +
-      '<p>Nos encantaría que nos acompañes el 13 de marzo de 2027.' +
-      (g.pases > 1 ? '<br>Tenemos <strong>' + g.pases + ' lugares</strong> reservados para ti.' : '') + '</p>' +
-      previo +
-      (g.pases > 1 ? '<label class="rsvp-field">¿Cuántos asistirán?<select id="rsvp-n">' + options + '</select></label>' : '') +
-      '<label class="rsvp-field">Mensaje para los novios (opcional)<textarea id="rsvp-msg" maxlength="500"></textarea></label>' +
-      '<div class="rsvp-actions">' +
-      '<button class="btn" data-asiste="1">Sí, asistiré</button>' +
-      '<button class="btn" data-asiste="0">No podré asistir</button>' +
-      '</div><p class="rsvp-error" hidden></p>';
-
-    body.querySelectorAll('[data-asiste]').forEach(function (b) {
-      b.addEventListener('click', function () { submit(b.getAttribute('data-asiste') === '1'); });
+  var busy = false;
+  function responder(guest, asiste) {
+    return rpc('responder_invitacion', {
+      p_slug: slug, p_asiste: asiste, p_asistentes: asiste ? guest.pases : 0, p_mensaje: null
     });
   }
 
-  function submit(asiste) {
-    var btns = body.querySelectorAll('[data-asiste]');
-    btns.forEach(function (b) { b.disabled = true; });
-    var nEl = body.querySelector('#rsvp-n');
-    var n = nEl ? parseInt(nEl.value, 10) : 1;
-    var msg = body.querySelector('#rsvp-msg').value;
-    rpc('responder_invitacion', { p_slug: slug, p_asiste: asiste, p_asistentes: n, p_mensaje: msg })
-      .then(function () {
-        guest.estado = asiste ? 'confirmado' : 'no_asiste';
-        guest.asistentes = asiste ? n : 0;
-        body.innerHTML = asiste
-          ? '<h2>¡Gracias!</h2><p>Tu asistencia quedó confirmada' + (n > 1 ? ' para ' + n + ' personas' : '') + '.<br><br>Nos dará mucho gusto verte.</p>'
-          : '<h2>Gracias por avisarnos</h2><p>Lamentamos que no puedas acompañarnos.<br><br>Te tendremos presente en este día.</p>';
-      })
-      .catch(function () {
-        btns.forEach(function (b) { b.disabled = false; });
-        var err = body.querySelector('.rsvp-error');
-        err.textContent = 'No pudimos guardar tu respuesta. Intenta de nuevo en un momento.';
-        err.hidden = false;
-      });
+  function confirmado(guest) {
+    show(
+      '<h2>¡Gracias, ' + esc(guest.nombre) + '!</h2>' +
+      '<p>Tu asistencia quedó confirmada' + (guest.pases > 1 ? ' para ' + guest.pases + ' personas' : '') + '.<br><br>Nos dará mucho gusto verte el 13 de marzo.</p>' +
+      '<button class="rsvp-link" type="button">¿Al final no podrás asistir? Avísanos aquí</button>'
+    );
+    body.querySelector('.rsvp-link').addEventListener('click', function () {
+      this.disabled = true;
+      responder(guest, false)
+        .then(function () { show('<h2>Gracias por avisarnos</h2><p>Lamentamos que no puedas acompañarnos.<br><br>Te tendremos presente en este día.</p>'); })
+        .catch(function () { show('<h2>Ups</h2><p class="rsvp-error">No pudimos guardar tu respuesta. Intenta de nuevo en un momento.</p>'); });
+    });
   }
 
-  rpc('get_invitado', { p_slug: slug })
-    .then(function (rows) {
-      if (!rows || !rows.length) return;
-      guest = rows[0];
-      var btn = document.querySelector('a.btn[href*="wa.me"]');
-      if (!btn) return;
-      btn.addEventListener('click', function (e) {
-        e.preventDefault();
-        renderForm();
-        modal.classList.add('active');
-      });
-    })
-    .catch(function () { /* sin conexión: se mantiene el enlace de WhatsApp */ });
+  btn.addEventListener('click', function (e) {
+    e.preventDefault();
+    if (busy) return;
+    busy = true;
+    var waHref = btn.href;
+    show('<h2>Un momento…</h2><p>Estamos registrando tu asistencia.</p>');
+    guestReq.then(function (guest) {
+      if (!guest) {
+        // La liga no corresponde a ningún invitado: se usa el WhatsApp original
+        close();
+        location.href = waHref;
+        return;
+      }
+      return responder(guest, true).then(function () { confirmado(guest); });
+    }).catch(function () {
+      show('<h2>Ups</h2><p class="rsvp-error">No pudimos registrar tu confirmación. Revisa tu conexión e intenta de nuevo.</p>');
+    }).then(function () { busy = false; });
+  });
 })();
